@@ -12,4 +12,4 @@ COPY lib/ ./lib/ 2>/dev/null || true
 
 EXPOSE 8000
 
-CMD ["python3", "-c", "from src.api import app; import uvicorn; uvicorn.run(app, host='0.0.0.0', port=8000)"]
+CMD ["sh", "-c", "python3 -m uvicorn src.api:app --host 0.0.0.0 --port 8000 || echo 'uvicorn failed' && tail -f /dev/null"]
