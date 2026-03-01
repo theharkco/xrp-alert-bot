@@ -5,7 +5,10 @@ nixPkgs = ["python311"]
 cmds = ["pip install -r requirements.txt"]
 
 [phases.build]
-cmds = ["echo 'No build needed for Python app'"]
+cmds = ["echo 'Build complete'"]
 
-[options]
-path = "."
+[variables]
+PORT = "8000"
+
+[phases.start]
+cmds = ["python3 -m uvicorn src.api:app --host 0.0.0.0 --port $PORT"]
