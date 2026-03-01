@@ -140,62 +140,20 @@ class AIPriceAnalyzer:
         return summaries.get(trend, "Market analysis pending")
 
 
-async def main():
-    """Main monitoring loop"""
-    service = XRPPriceService()
-    analyzer = AIPriceAnalyzer()
+def get_initial_price() -> Optional[float]:
+    """Synchronous price fetch for API startup"""
+    import aiohttp
     
-    # Setup alerts
-    service.alerts = [
-        PriceAlert(symbol="xrpusd", threshold=2.50, condition="greater_than", enabled=True),
-        PriceAlert(symbol="xrpusd", threshold=2.00, condition="less_than", enabled=True),
-    ]
+    ws_url = "wss://data.ripple.com/data/stream"
+    rest_url = "https://data.ripple.com/v2/exchanges/Binance/charts"
     
-    async with aiohttp.ClientSession() as session:
-        # Get initial price
-        initial_price = await service.get_historical_price(session)
-        if initial_price:
-            logger.info(f"Initial XRP price: ${initial_price:.4f}")
-        
-        # Connect to WebSocket
-        ws = await service.connect(session)
-        if not ws:
-            logger.error("Failed to connect to WebSocket. Exiting.")
-            return
-        
-        logger.info("Starting price monitoring...")
-        prices_history: list[float] = []
-        
-        try:
-            async for msg in ws:
-                if msg.type == aiohttp.WSMsgType.TEXT:
-                    data = json.loads(msg.data)
-                    
-                    if "type" in data and data["type"] == "trade":
-                        price = data.get("price", 0)
-                        service.current_price = price
-                        prices_history.append(price)
-                        
-                        # Keep only last 100 prices for analysis
-                        if len(prices_history) > 100:
-                            prices_history = prices_history[-100:]
-                        
-                        # Check alerts
-                        alerts = service.check_alerts(price)
-                        for alert in alerts:
-                            logger.warning(alert["message"])
-                            # Here you could integrate with Telegram, Discord, etc.
-                        
-                        # AI Analysis every 10 updates
-                        if len(prices_history) % 10 == 0:
-                            analysis = await analyzer.analyze_price_trend(prices_history)
-                            logger.info(f"AI Analysis: {analysis['analysis']}")
-        
-        except asyncio.CancelledError:
-            logger.info("Monitoring stopped")
-        finally:
-            await ws.close()
+    async def fetch():
+        async with aiohttp.ClientSession() as session:
+            return await XRPPriceService().get_historical_price(session)
+    
+    return asyncio.run(fetch())
 
 
 if __name__ == "__main__":
+    # For standalone monitoring mode
     asyncio.run(main())

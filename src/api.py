@@ -2,12 +2,22 @@
 FastAPI server for XRP Price Alert Bot
 """
 
+import asyncio
+import datetime
+import logging
+from typing import Optional
+
+import aiohttp
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-import asyncio
-from typing import Optional, list
 
-from src.main import XRPPriceService, AIPriceAnalyzer, PriceAlert
+from .main import XRPPriceService, AIPriceAnalyzer, PriceAlert
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="XRP Price Alert Bot",
@@ -16,7 +26,19 @@ app = FastAPI(
 )
 
 # Global service instance
-price_service = XRPPriceService()
+_price_service: Optional[XRPPriceService] = None
+
+
+def get_price_service() -> XRPPriceService:
+    """Get or create the global price service instance"""
+    global _price_service
+    if _price_service is None:
+        _price_service = XRPPriceService()
+        _price_service.alerts = [
+            PriceAlert(symbol="xrpusd", threshold=2.50, condition="greater_than", enabled=True),
+            PriceAlert(symbol="xrpusd", threshold=2.00, condition="less_than", enabled=True),
+        ]
+    return _price_service
 
 
 class AlertConfig(BaseModel):
@@ -44,13 +66,11 @@ class PriceResponse(BaseModel):
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize service on startup"""
-    global price_service
-    # Setup default alerts
-    price_service.alerts = [
-        PriceAlert(symbol="xrpusd", threshold=2.50, condition="greater_than", enabled=True),
-        PriceAlert(symbol="xrpusd", threshold=2.00, condition="less_than", enabled=True),
-    ]
+    """Initialize service on startup - no WebSocket connection to avoid crashes"""
+    global _price_service
+    # Just set up alerts, don't connect to WebSocket on startup
+    get_price_service()
+    logger.info("API server started successfully (no WebSocket connection)")
 
 
 @app.get("/")
@@ -71,10 +91,11 @@ async def root():
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
+    service = get_price_service()
     return {
         "status": "healthy",
-        "current_price": price_service.current_price,
-        "alerts_active": len([a for a in price_service.alerts if a.enabled])
+        "current_price": service.current_price,
+        "alerts_active": len([a for a in service.alerts if a.enabled])
     }
 
 
@@ -82,6 +103,7 @@ async def health_check():
 async def configure_alert(alert_config: AlertConfig):
     """Add or update a price alert"""
     try:
+        service = get_price_service()
         # Validate condition
         if alert_config.condition not in ["greater_than", "less_than"]:
             raise HTTPException(status_code=400, detail="Invalid condition")
@@ -95,7 +117,7 @@ async def configure_alert(alert_config: AlertConfig):
         )
         
         # Add to service
-        price_service.alerts.append(alert)
+        service.alerts.append(alert)
         
         return AlertResponse(
             success=True,
@@ -109,6 +131,7 @@ async def configure_alert(alert_config: AlertConfig):
 @app.get("/alerts")
 async def list_alerts():
     """List all active alerts"""
+    service = get_price_service()
     return {
         "alerts": [
             {
@@ -117,19 +140,20 @@ async def list_alerts():
                 "condition": alert.condition,
                 "enabled": alert.enabled
             }
-            for alert in price_service.alerts
+            for alert in service.alerts
         ],
-        "total": len(price_service.alerts)
+        "total": len(service.alerts)
     }
 
 
 @app.delete("/alerts/{alert_index}")
 async def delete_alert(alert_index: int):
     """Delete an alert by index"""
-    if alert_index < 0 or alert_index >= len(price_service.alerts):
+    service = get_price_service()
+    if alert_index < 0 or alert_index >= len(service.alerts):
         raise HTTPException(status_code=404, detail="Alert not found")
     
-    deleted = price_service.alerts.pop(alert_index)
+    deleted = service.alerts.pop(alert_index)
     return {
         "success": True,
         "message": f"Alert deleted: {deleted.symbol} {deleted.condition} ${deleted.threshold}"
@@ -139,23 +163,29 @@ async def delete_alert(alert_index: int):
 @app.get("/price", response_model=PriceResponse)
 async def get_price():
     """Get current XRP price"""
-    async with aiohttp.ClientSession() as session:
-        price = await price_service.get_historical_price(session)
+    service = get_price_service()
+    session = aiohttp.ClientSession()
+    try:
+        price = await service.get_historical_price(session)
         
         if not price:
             raise HTTPException(status_code=500, detail="Failed to fetch price")
         
         return PriceResponse(
             price=price,
-            timestamp=datetime.now().isoformat()
+            timestamp=datetime.datetime.now().isoformat()
         )
+    finally:
+        await session.close()
 
 
 @app.post("/analyze", response_model=dict)
 async def analyze_price():
     """Analyze current price trend"""
-    async with aiohttp.ClientSession() as session:
-        price = await price_service.get_historical_price(session)
+    service = get_price_service()
+    session = aiohttp.ClientSession()
+    try:
+        price = await service.get_historical_price(session)
         
         if not price:
             raise HTTPException(status_code=500, detail="Failed to fetch price")
@@ -166,6 +196,8 @@ async def analyze_price():
         analysis = await AIPriceAnalyzer.analyze_price_trend(prices)
         
         return analysis
+    finally:
+        await session.close()
 
 
 if __name__ == "__main__":
