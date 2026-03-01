@@ -1,4 +1,4 @@
-FROM tiangolo/uvicorn-gunicorn:python3.11
+FROM python:3.11-slim
 
 WORKDIR /app
 
@@ -6,7 +6,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY src/ ./src/
+COPY src/__init__.py ./src/__init__.py 2>/dev/null || true
 
 EXPOSE 8000
 
-CMD ["python3", "src/app.py"]
+CMD ["python3", "-c", "import subprocess; subprocess.run(['python3', 'src/app.py'])"]
