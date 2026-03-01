@@ -1,17 +1,11 @@
-from flask import Flask
+from fastapi import FastAPI
 
-app = Flask(__name__)
+app = FastAPI()
 
-@app.route("/")
-def hello():
-    return "Hello World from XRP Alert Bot"
+@app.get("/")
+async def root():
+    return {"message": "Hello World from XRP Alert Bot"}
 
-@app.route("/health")
-def health():
+@app.get("/health")
+async def health():
     return {"status": "healthy"}
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8000)
-
-# For gunicorn
-application = app
