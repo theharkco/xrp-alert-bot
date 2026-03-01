@@ -156,4 +156,4 @@ def get_initial_price() -> Optional[float]:
 
 if __name__ == "__main__":
     # For standalone monitoring mode
-    asyncio.run(main())
+    logger.info("Running in standalone monitoring mode - WebSocket connection disabled")
