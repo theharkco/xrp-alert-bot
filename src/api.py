@@ -65,12 +65,12 @@ class PriceResponse(BaseModel):
 
 
 @app.on_event("startup")
-async def startup_event():
+def startup_event():
     """Initialize service on startup - no WebSocket connection to avoid crashes"""
     global _price_service
     # Just set up alerts, don't connect to WebSocket on startup
     get_price_service()
-    logger.info("API server started successfully (no WebSocket connection)")
+    logger.info("API server started successfully (no network calls on startup)")
 
 
 @app.get("/")
