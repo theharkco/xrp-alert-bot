@@ -3,8 +3,20 @@
 
 import json
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from fastapi import FastAPI
 
+# FastAPI app for nixpacks uvicorn
+app = FastAPI()
 
+@app.get("/")
+async def root():
+    return {"message": "Hello World from XRP Alert Bot"}
+
+@app.get("/health")
+async def health():
+    return {"status": "healthy"}
+
+# HTTP server for direct execution
 class SimpleHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)

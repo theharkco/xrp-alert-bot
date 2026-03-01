@@ -10,4 +10,4 @@ COPY src/__init__.py ./src/__init__.py 2>/dev/null || true
 
 EXPOSE 8000
 
-CMD ["python3", "-u", "src/server.py"]
+CMD ["python3", "-m", "uvicorn", "src.server:app", "--host", "0.0.0.0", "--port", "8000"]
